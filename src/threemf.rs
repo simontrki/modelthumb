@@ -9,7 +9,8 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
-pub const THUMB_REL: &str = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail";
+pub const THUMB_REL: &str =
+    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail";
 const MODEL_REL: &str = "http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel";
 
 /// Row-vector affine transform as in the 3MF spec: p' = p.x*r0 + p.y*r1 + p.z*r2 + r3
@@ -18,11 +19,19 @@ const IDENT: Tf = [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.], [0., 0., 0.]];
 
 fn parse_tf(s: Option<String>) -> Tf {
     let Some(s) = s else { return IDENT };
-    let v: Vec<f64> = s.split_ascii_whitespace().filter_map(|x| x.parse().ok()).collect();
+    let v: Vec<f64> = s
+        .split_ascii_whitespace()
+        .filter_map(|x| x.parse().ok())
+        .collect();
     if v.len() != 12 {
         return IDENT;
     }
-    [[v[0], v[1], v[2]], [v[3], v[4], v[5]], [v[6], v[7], v[8]], [v[9], v[10], v[11]]]
+    [
+        [v[0], v[1], v[2]],
+        [v[3], v[4], v[5]],
+        [v[6], v[7], v[8]],
+        [v[9], v[10], v[11]],
+    ]
 }
 
 /// apply a, then b
@@ -30,7 +39,8 @@ fn compose(a: &Tf, b: &Tf) -> Tf {
     let mut o = [[0.0; 3]; 4];
     for i in 0..4 {
         for j in 0..3 {
-            o[i][j] = (0..3).map(|k| a[i][k] * b[k][j]).sum::<f64>() + if i == 3 { b[3][j] } else { 0.0 };
+            o[i][j] =
+                (0..3).map(|k| a[i][k] * b[k][j]).sum::<f64>() + if i == 3 { b[3][j] } else { 0.0 };
         }
     }
     o
@@ -59,7 +69,14 @@ fn local(name: &[u8]) -> &[u8] {
 fn attrs(e: &BytesStart) -> HashMap<Vec<u8>, String> {
     e.attributes()
         .flatten()
-        .map(|a| (local(a.key.as_ref()).to_vec(), a.unescape_value().map(|v| v.into_owned()).unwrap_or_default()))
+        .map(|a| {
+            (
+                local(a.key.as_ref()).to_vec(),
+                a.unescape_value()
+                    .map(|v| v.into_owned())
+                    .unwrap_or_default(),
+            )
+        })
         .collect()
 }
 
@@ -83,7 +100,11 @@ fn parse_part(xml: &[u8], part: &str) -> Result<Part> {
     let mut tris: Vec<[u32; 3]> = vec![];
     let mut comps: Vec<(String, String, Tf)> = vec![];
     let mut has_mesh = false;
-    let num = |a: &HashMap<Vec<u8>, String>, k: &[u8]| a.get(k).and_then(|s| s.trim().parse::<f64>().ok()).unwrap_or(0.0);
+    let num = |a: &HashMap<Vec<u8>, String>, k: &[u8]| {
+        a.get(k)
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .unwrap_or(0.0)
+    };
     loop {
         let ev = rd.read_event_into(&mut buf).context("3MF XML error")?;
         match &ev {
@@ -110,13 +131,19 @@ fn parse_part(xml: &[u8], part: &str) -> Result<Part> {
                 }
                 b"component" => {
                     let mut a = attrs(e);
-                    let p = a.remove(b"path".as_slice()).map(|p| norm_path(&p)).unwrap_or_else(|| part.to_string());
+                    let p = a
+                        .remove(b"path".as_slice())
+                        .map(|p| norm_path(&p))
+                        .unwrap_or_else(|| part.to_string());
                     let id = a.remove(b"objectid".as_slice()).unwrap_or_default();
                     comps.push((p, id, parse_tf(a.remove(b"transform".as_slice()))));
                 }
                 b"item" => {
                     let mut a = attrs(e);
-                    let p = a.remove(b"path".as_slice()).map(|p| norm_path(&p)).unwrap_or_else(|| part.to_string());
+                    let p = a
+                        .remove(b"path".as_slice())
+                        .map(|p| norm_path(&p))
+                        .unwrap_or_else(|| part.to_string());
                     let id = a.remove(b"objectid".as_slice()).unwrap_or_default();
                     items.push((id, parse_tf(a.remove(b"transform".as_slice())), p));
                 }
@@ -158,7 +185,11 @@ pub fn rels(xml: &[u8]) -> Vec<(String, String)> {
                 let a = attrs(&e);
                 out.push((
                     a.get(b"Type".as_slice()).cloned().unwrap_or_default(),
-                    norm_path(a.get(b"Target".as_slice()).map(String::as_str).unwrap_or("")),
+                    norm_path(
+                        a.get(b"Target".as_slice())
+                            .map(String::as_str)
+                            .unwrap_or(""),
+                    ),
                 ));
             }
             Event::Eof => break,
@@ -174,29 +205,57 @@ pub fn rels(xml: &[u8]) -> Vec<(String, String)> {
 pub fn thumbnail(path: &Path) -> Option<Vec<u8>> {
     let mut z = zip::ZipArchive::new(BufReader::new(File::open(path).ok()?)).ok()?;
     let mut cands: Vec<String> = read_entry(&mut z, "_rels/.rels")
-        .map(|r| rels(&r).into_iter().filter(|(t, _)| t == THUMB_REL).map(|(_, p)| p).collect())
+        .map(|r| {
+            rels(&r)
+                .into_iter()
+                .filter(|(t, _)| t == THUMB_REL)
+                .map(|(_, p)| p)
+                .collect()
+        })
         .unwrap_or_default();
-    for c in ["Metadata/thumbnail.png", "Metadata/plate_1.png", "Metadata/top_1.png", "Metadata/thumbnail.jpg"] {
+    for c in [
+        "Metadata/thumbnail.png",
+        "Metadata/plate_1.png",
+        "Metadata/top_1.png",
+        "Metadata/thumbnail.jpg",
+    ] {
         cands.push(c.into());
     }
     cands.iter().find_map(|c| read_entry(&mut z, c))
 }
 
 pub fn load(path: &Path) -> Result<Mesh> {
-    let mut z = zip::ZipArchive::new(BufReader::new(File::open(path)?)).map_err(|e| anyhow!("not a 3MF (zip) file: {e}"))?;
+    let mut z = zip::ZipArchive::new(BufReader::new(File::open(path)?))
+        .map_err(|e| anyhow!("not a 3MF (zip) file: {e}"))?;
     let names: Vec<String> = z.file_names().map(String::from).collect();
     let root = read_entry(&mut z, "_rels/.rels")
-        .and_then(|r| rels(&r).into_iter().find(|(t, _)| t == MODEL_REL).map(|(_, p)| p))
+        .and_then(|r| {
+            rels(&r)
+                .into_iter()
+                .find(|(t, _)| t == MODEL_REL)
+                .map(|(_, p)| p)
+        })
         .filter(|p| names.contains(p))
-        .or_else(|| names.iter().find(|n| n.starts_with("3D/") && n.to_lowercase().ends_with(".model")).cloned())
+        .or_else(|| {
+            names
+                .iter()
+                .find(|n| n.starts_with("3D/") && n.to_lowercase().ends_with(".model"))
+                .cloned()
+        })
         .ok_or_else(|| anyhow!("3MF without model part"))?;
 
     let mut parts: HashMap<String, Part> = HashMap::new();
-    fn ensure(z: &mut zip::ZipArchive<BufReader<File>>, parts: &mut HashMap<String, Part>, p: &str) -> bool {
+    fn ensure(
+        z: &mut zip::ZipArchive<BufReader<File>>,
+        parts: &mut HashMap<String, Part>,
+        p: &str,
+    ) -> bool {
         if parts.contains_key(p) {
             return true;
         }
-        let Some(xml) = read_entry(z, p) else { return false };
+        let Some(xml) = read_entry(z, p) else {
+            return false;
+        };
         match parse_part(&xml, p) {
             Ok(part) => {
                 parts.insert(p.to_string(), part);
@@ -210,17 +269,24 @@ pub fn load(path: &Path) -> Result<Mesh> {
     }
     let mut items = parts[&root].items.clone();
     if items.is_empty() {
-        items = parts[&root].objects.keys().map(|k| (k.clone(), IDENT, root.clone())).collect();
+        items = parts[&root]
+            .objects
+            .keys()
+            .map(|k| (k.clone(), IDENT, root.clone()))
+            .collect();
     }
 
     let mut mesh = Mesh::default();
-    let mut stack: Vec<(String, String, Tf, u32)> = items.into_iter().map(|(id, t, p)| (p, id, t, 0)).collect();
+    let mut stack: Vec<(String, String, Tf, u32)> =
+        items.into_iter().map(|(id, t, p)| (p, id, t, 0)).collect();
     while let Some((p, id, t, depth)) = stack.pop() {
         if depth > 32 || !ensure(&mut z, &mut parts, &p) {
             continue;
         }
         match parts[&p].objects.get(&id) {
-            Some(Obj::Mesh(v, f)) => mesh.append(v.iter().map(|q| apply(&t, *q)), f.iter().copied()),
+            Some(Obj::Mesh(v, f)) => {
+                mesh.append(v.iter().map(|q| apply(&t, *q)), f.iter().copied())
+            }
             Some(Obj::Comps(cs)) => {
                 for (cp, cid, ct) in cs {
                     stack.push((cp.clone(), cid.clone(), compose(ct, &t), depth + 1));

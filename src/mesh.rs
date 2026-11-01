@@ -12,7 +12,11 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn append(&mut self, verts: impl IntoIterator<Item = [f32; 3]>, faces: impl IntoIterator<Item = [u32; 3]>) {
+    pub fn append(
+        &mut self,
+        verts: impl IntoIterator<Item = [f32; 3]>,
+        faces: impl IntoIterator<Item = [u32; 3]>,
+    ) {
         let off = self.verts.len() as u32;
         self.verts.extend(verts);
         let n = self.verts.len() as u32;
@@ -45,7 +49,8 @@ pub enum Kind {
 }
 
 pub const EXTENSIONS: &[&str] = &[
-    "stl", "3mf", "step", "stp", "p21", "iges", "igs", "brep", "brp", "obj", "ply", "glb", "gltf", "off",
+    "stl", "3mf", "step", "stp", "p21", "iges", "igs", "brep", "brp", "obj", "ply", "glb", "gltf",
+    "off",
 ];
 
 pub fn sniff(path: &Path) -> Result<Kind> {
@@ -112,7 +117,8 @@ fn stl_binary(data: &[u8], n: usize) -> Mesh {
         let o = 84 + i * 50 + 12;
         for k in 0..3 {
             let p = o + k * 12;
-            let f = |j: usize| f32::from_le_bytes(data[p + j * 4..p + j * 4 + 4].try_into().unwrap());
+            let f =
+                |j: usize| f32::from_le_bytes(data[p + j * 4..p + j * 4 + 4].try_into().unwrap());
             m.verts.push([f(0), f(1), f(2)]);
         }
         let b = (i * 3) as u32;
@@ -145,7 +151,9 @@ pub fn load_stl(path: &Path) -> Result<Mesh> {
     if m.verts.len() >= 3 {
         let n = m.verts.len() / 3;
         m.verts.truncate(n * 3);
-        m.faces = (0..n as u32).map(|i| [i * 3, i * 3 + 1, i * 3 + 2]).collect();
+        m.faces = (0..n as u32)
+            .map(|i| [i * 3, i * 3 + 1, i * 3 + 2])
+            .collect();
         return Ok(m);
     }
     if data.len() > 84 {
@@ -157,13 +165,23 @@ pub fn load_stl(path: &Path) -> Result<Mesh> {
 
 // ------------------------------------------------------------------ OBJ
 pub fn load_obj(path: &Path) -> Result<Mesh> {
-    let opts = tobj::LoadOptions { triangulate: true, single_index: false, ignore_points: true, ignore_lines: true };
+    let opts = tobj::LoadOptions {
+        triangulate: true,
+        single_index: false,
+        ignore_points: true,
+        ignore_lines: true,
+    };
     let (models, _) = tobj::load_obj(path, &opts).context("OBJ parse error")?;
     let mut m = Mesh::default();
     for model in models {
         let p = &model.mesh.positions;
         let verts = p.chunks_exact(3).map(|c| [c[0], c[1], c[2]]);
-        let faces: Vec<[u32; 3]> = model.mesh.indices.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+        let faces: Vec<[u32; 3]> = model
+            .mesh
+            .indices
+            .chunks_exact(3)
+            .map(|c| [c[0], c[1], c[2]])
+            .collect();
         m.append(verts, faces);
     }
     m.y_up_to_z_up();
@@ -187,13 +205,19 @@ fn mat_mul(a: &Mat4, b: &Mat4) -> Mat4 {
 pub fn load_gltf(path: &Path) -> Result<Mesh> {
     let (doc, buffers, _) = gltf::import(path).context("glTF parse error")?;
     let mut m = Mesh::default();
-    let ident: Mat4 = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.], [0., 0., 0., 1.]];
+    let ident: Mat4 = [
+        [1., 0., 0., 0.],
+        [0., 1., 0., 0.],
+        [0., 0., 1., 0.],
+        [0., 0., 0., 1.],
+    ];
     let scene = doc.default_scene().or_else(|| doc.scenes().next());
     let roots: Vec<gltf::Node> = match &scene {
         Some(s) => s.nodes().collect(),
         None => doc.nodes().collect(),
     };
-    let mut stack: Vec<(gltf::Node, Mat4, u32)> = roots.into_iter().map(|n| (n, ident, 0)).collect();
+    let mut stack: Vec<(gltf::Node, Mat4, u32)> =
+        roots.into_iter().map(|n| (n, ident, 0)).collect();
     while let Some((node, parent, depth)) = stack.pop() {
         if depth > 64 {
             continue;
@@ -205,7 +229,9 @@ pub fn load_gltf(path: &Path) -> Result<Mesh> {
                     continue;
                 }
                 let r = prim.reader(|b| buffers.get(b.index()).map(|d| &d.0[..]));
-                let Some(pos) = r.read_positions() else { continue };
+                let Some(pos) = r.read_positions() else {
+                    continue;
+                };
                 let verts: Vec<[f32; 3]> = pos
                     .map(|p| {
                         let mut o = [0f32; 3];
@@ -219,7 +245,12 @@ pub fn load_gltf(path: &Path) -> Result<Mesh> {
                     Some(i) => i.into_u32().collect(),
                     None => (0..verts.len() as u32).collect(),
                 };
-                m.append(verts, idx.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect::<Vec<_>>());
+                m.append(
+                    verts,
+                    idx.chunks_exact(3)
+                        .map(|c| [c[0], c[1], c[2]])
+                        .collect::<Vec<_>>(),
+                );
             }
         }
         for ch in node.children() {
@@ -242,7 +273,12 @@ pub fn load_off(path: &Path) -> Result<Mesh> {
     if !head.ends_with("OFF") {
         bail!("not an OFF file");
     }
-    let mut num = || -> Result<f64> { toks.next().ok_or_else(|| anyhow!("truncated OFF"))?.parse().map_err(Into::into) };
+    let mut num = || -> Result<f64> {
+        toks.next()
+            .ok_or_else(|| anyhow!("truncated OFF"))?
+            .parse()
+            .map_err(Into::into)
+    };
     let (nv, nf, _) = (num()? as usize, num()? as usize, num()?);
     let mut m = Mesh::default();
     for _ in 0..nv {
@@ -250,7 +286,9 @@ pub fn load_off(path: &Path) -> Result<Mesh> {
     }
     for _ in 0..nf {
         let k = num()? as usize;
-        let idx: Vec<u32> = (0..k).map(|_| num().map(|x| x as u32)).collect::<Result<_>>()?;
+        let idx: Vec<u32> = (0..k)
+            .map(|_| num().map(|x| x as u32))
+            .collect::<Result<_>>()?;
         for i in 1..k.saturating_sub(1) {
             m.faces.push([idx[0], idx[i], idx[i + 1]]);
         }
@@ -308,7 +346,11 @@ struct PlyReader<'a> {
 impl PlyReader<'_> {
     fn read(&mut self, t: PT) -> Result<f64> {
         if let Some(it) = &mut self.ascii {
-            return it.next().ok_or_else(|| anyhow!("truncated PLY"))?.parse().map_err(Into::into);
+            return it
+                .next()
+                .ok_or_else(|| anyhow!("truncated PLY"))?
+                .parse()
+                .map_err(Into::into);
         }
         let sz = match t {
             PT::I8 | PT::U8 => 1,
@@ -316,7 +358,10 @@ impl PlyReader<'_> {
             PT::I32 | PT::U32 | PT::F32 => 4,
             PT::F64 => 8,
         };
-        let b = self.data.get(self.pos..self.pos + sz).ok_or_else(|| anyhow!("truncated PLY"))?;
+        let b = self
+            .data
+            .get(self.pos..self.pos + sz)
+            .ok_or_else(|| anyhow!("truncated PLY"))?;
         self.pos += sz;
         let mut a = [0u8; 8];
         a[..sz].copy_from_slice(b);
@@ -355,11 +400,24 @@ pub fn load_ply(path: &Path) -> Result<Mesh> {
     for line in header.lines() {
         let t: Vec<&str> = line.split_ascii_whitespace().collect();
         match t.as_slice() {
-            ["format", f, ..] => format = if f.contains("big") { "be" } else if f.contains("little") { "le" } else { "ascii" },
-            ["element", name, n] => elems.push(Elem { name: name.to_string(), count: n.parse()?, props: vec![] }),
+            ["format", f, ..] => {
+                format = if f.contains("big") {
+                    "be"
+                } else if f.contains("little") {
+                    "le"
+                } else {
+                    "ascii"
+                }
+            }
+            ["element", name, n] => elems.push(Elem {
+                name: name.to_string(),
+                count: n.parse()?,
+                props: vec![],
+            }),
             ["property", "list", c, i, name] => {
                 if let Some(e) = elems.last_mut() {
-                    e.props.push(Prop::List(name.to_string(), ptype(c)?, ptype(i)?))
+                    e.props
+                        .push(Prop::List(name.to_string(), ptype(c)?, ptype(i)?))
                 }
             }
             ["property", ty, name] => {
@@ -371,7 +429,12 @@ pub fn load_ply(path: &Path) -> Result<Mesh> {
         }
     }
     let ascii_text;
-    let mut r = PlyReader { data: &data, pos: body, le: format != "be", ascii: None };
+    let mut r = PlyReader {
+        data: &data,
+        pos: body,
+        le: format != "be",
+        ascii: None,
+    };
     if format == "ascii" {
         ascii_text = String::from_utf8_lossy(&data[body..]).to_string();
         r.ascii = Some(ascii_text.split_ascii_whitespace());
@@ -399,7 +462,8 @@ pub fn load_ply(path: &Path) -> Result<Mesh> {
                         for _ in 0..k {
                             idx.push(r.read(*it)? as u32);
                         }
-                        if e.name == "face" && (name == "vertex_indices" || name == "vertex_index") {
+                        if e.name == "face" && (name == "vertex_indices" || name == "vertex_index")
+                        {
                             for i in 1..k.saturating_sub(1) {
                                 m.faces.push([idx[0], idx[i], idx[i + 1]]);
                             }

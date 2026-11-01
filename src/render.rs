@@ -41,7 +41,11 @@ fn sub(a: V3, b: V3) -> V3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 fn cross(a: V3, b: V3) -> V3 {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 fn dot(a: V3, b: V3) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
@@ -71,7 +75,17 @@ fn weld(m: &Mesh) -> (Vec<V3>, Vec<[u32; 3]>) {
         });
         remap.push(id);
     }
-    let faces = m.faces.iter().map(|f| [remap[f[0] as usize], remap[f[1] as usize], remap[f[2] as usize]]).collect();
+    let faces = m
+        .faces
+        .iter()
+        .map(|f| {
+            [
+                remap[f[0] as usize],
+                remap[f[1] as usize],
+                remap[f[2] as usize],
+            ]
+        })
+        .collect();
     (verts, faces)
 }
 
@@ -82,10 +96,25 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
     let (verts, mut faces) = if o.smooth {
         weld(mesh)
     } else {
-        (mesh.verts.iter().map(|v| [v[0] as f64, v[1] as f64, v[2] as f64]).collect(), mesh.faces.clone())
+        (
+            mesh.verts
+                .iter()
+                .map(|v| [v[0] as f64, v[1] as f64, v[2] as f64])
+                .collect(),
+            mesh.faces.clone(),
+        )
     };
-    faces.retain(|f| f.iter().all(|&i| verts[i as usize].iter().all(|c| c.is_finite())));
-    let mut ss = if size <= 128 { 4 } else if size <= 384 { 3 } else { 2 };
+    faces.retain(|f| {
+        f.iter()
+            .all(|&i| verts[i as usize].iter().all(|c| c.is_finite()))
+    });
+    let mut ss = if size <= 128 {
+        4
+    } else if size <= 384 {
+        3
+    } else {
+        2
+    };
     if faces.len() > 2_000_000 && ss > 2 {
         ss -= 1;
     }
@@ -112,9 +141,17 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
         }
     }
     if faces.is_empty() {
-        return Image { w: size as u32, h: size as u32, px: vec![0; size * size * 4] };
+        return Image {
+            w: size as u32,
+            h: size as u32,
+            px: vec![0; size * size * 4],
+        };
     }
-    let c = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0, (lo[2] + hi[2]) / 2.0];
+    let c = [
+        (lo[0] + hi[0]) / 2.0,
+        (lo[1] + hi[1]) / 2.0,
+        (lo[2] + hi[2]) / 2.0,
+    ];
     let p: Vec<V3> = verts
         .iter()
         .map(|v| {
@@ -134,7 +171,13 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
     let mid = [(l2[0] + h2[0]) / 2.0, (l2[1] + h2[1]) / 2.0];
     let s: Vec<V3> = p
         .iter()
-        .map(|q| [(q[0] - mid[0]) * scale + n as f64 / 2.0, n as f64 / 2.0 - (q[1] - mid[1]) * scale, q[2] * scale])
+        .map(|q| {
+            [
+                (q[0] - mid[0]) * scale + n as f64 / 2.0,
+                n as f64 / 2.0 - (q[1] - mid[1]) * scale,
+                q[2] * scale,
+            ]
+        })
         .collect();
 
     // ---------------------------------------------------------------- rasterize into z / face-id buffers
@@ -155,9 +198,21 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
         }
         let inv = 1.0 / area;
         // barycentric weights as linear functions of (x, y)
-        let ea = [(b[1] - cc[1]) * inv, (cc[0] - b[0]) * inv, (b[0] * cc[1] - cc[0] * b[1]) * inv];
-        let eb = [(cc[1] - a[1]) * inv, (a[0] - cc[0]) * inv, (cc[0] * a[1] - a[0] * cc[1]) * inv];
-        let ec = [(a[1] - b[1]) * inv, (b[0] - a[0]) * inv, (a[0] * b[1] - b[0] * a[1]) * inv];
+        let ea = [
+            (b[1] - cc[1]) * inv,
+            (cc[0] - b[0]) * inv,
+            (b[0] * cc[1] - cc[0] * b[1]) * inv,
+        ];
+        let eb = [
+            (cc[1] - a[1]) * inv,
+            (a[0] - cc[0]) * inv,
+            (cc[0] * a[1] - a[0] * cc[1]) * inv,
+        ];
+        let ec = [
+            (a[1] - b[1]) * inv,
+            (b[0] - a[0]) * inv,
+            (a[0] * b[1] - b[0] * a[1]) * inv,
+        ];
         let zl = [
             ea[0] * a[2] + eb[0] * b[2] + ec[0] * cc[2],
             ea[1] * a[2] + eb[1] * b[2] + ec[1] * cc[2],
@@ -188,7 +243,12 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
     // ---------------------------------------------------------------- normals
     let fnrm: Vec<V3> = faces
         .iter()
-        .map(|f| norm(cross(sub(p[f[1] as usize], p[f[0] as usize]), sub(p[f[2] as usize], p[f[0] as usize]))))
+        .map(|f| {
+            norm(cross(
+                sub(p[f[1] as usize], p[f[0] as usize]),
+                sub(p[f[2] as usize], p[f[0] as usize]),
+            ))
+        })
         .collect();
     // per-corner normals for visible faces only: average the neighbour faces that meet this face
     // at less than the crease angle. Orientation-agnostic, because CAD tessellators and broken
@@ -220,7 +280,12 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
         }
         let area: Vec<f64> = faces
             .iter()
-            .map(|f| dot3len(cross(sub(p[f[1] as usize], p[f[0] as usize]), sub(p[f[2] as usize], p[f[0] as usize]))))
+            .map(|f| {
+                dot3len(cross(
+                    sub(p[f[1] as usize], p[f[0] as usize]),
+                    sub(p[f[2] as usize], p[f[0] as usize]),
+                ))
+            })
             .collect();
         for (fi, f) in faces.iter().enumerate() {
             if !visible[fi] {
@@ -252,7 +317,10 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
         (norm([0.70, -0.10, 0.55]), 0.30), // fill, right
         (norm([0.00, -0.80, 0.30]), 0.12), // bounce from below
     ];
-    let halfs: Vec<V3> = lights.iter().map(|(l, _)| norm([l[0], l[1], l[2] + 1.0])).collect();
+    let halfs: Vec<V3> = lights
+        .iter()
+        .map(|(l, _)| norm([l[0], l[1], l[2] + 1.0]))
+        .collect();
 
     let mut rgb = vec![0f32; n * n * 3];
     let mut alpha = vec![0u8; n * n];
@@ -272,7 +340,11 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
             let area = (b[0] - a[0]) * (cc[1] - a[1]) - (cc[0] - a[0]) * (b[1] - a[1]);
             let wa = ((b[0] - cx) * (cc[1] - cy) - (cc[0] - cx) * (b[1] - cy)) / area;
             let wb = ((cc[0] - cx) * (a[1] - cy) - (a[0] - cx) * (cc[1] - cy)) / area;
-            let w = [wa.clamp(0.0, 1.0), wb.clamp(0.0, 1.0), (1.0 - wa - wb).clamp(0.0, 1.0)];
+            let w = [
+                wa.clamp(0.0, 1.0),
+                wb.clamp(0.0, 1.0),
+                (1.0 - wa - wb).clamp(0.0, 1.0),
+            ];
             let mut acc = [0.0; 3];
             let cn = corner[&(fi as u32)];
             for k in 0..3 {
@@ -318,9 +390,12 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
         for y in 0..n {
             for x in 0..n {
                 let i = y * n + x;
-                for j in [if x + 1 < n { Some(i + 1) } else { None }, if y + 1 < n { Some(i + n) } else { None }]
-                    .into_iter()
-                    .flatten()
+                for j in [
+                    if x + 1 < n { Some(i + 1) } else { None },
+                    if y + 1 < n { Some(i + n) } else { None },
+                ]
+                .into_iter()
+                .flatten()
                 {
                     let (a, b) = (zz(i), zz(j));
                     if (a - b).abs() > thr {
@@ -391,5 +466,9 @@ pub fn render(mesh: &Mesh, o: &Options) -> Image {
             }
         }
     }
-    Image { w: size as u32, h: size as u32, px: out }
+    Image {
+        w: size as u32,
+        h: size as u32,
+        px: out,
+    }
 }

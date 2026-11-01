@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds dist/3D-Thumbnailer-x86_64.AppImage
+# Builds dist/modelthumb-x86_64.AppImage
 # Needs: cargo, curl, unzip, dpkg-deb (or ar+tar), and optionally cargo-zigbuild for a glibc-2.17 binary.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -12,11 +12,11 @@ mkdir -p "$BUILD/dl" "$ROOT/dist"
 echo "==> compiling"
 if command -v cargo-zigbuild >/dev/null; then
   cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.17
-  BIN=target/x86_64-unknown-linux-gnu/release/3dthumb
+  BIN=target/x86_64-unknown-linux-gnu/release/modelthumb
 else
   echo "   (cargo-zigbuild not found: binary will need the build host's glibc or newer)"
   cargo build --release
-  BIN=target/release/3dthumb
+  BIN=target/release/modelthumb
 fi
 
 echo "==> fetching libgmsh $GMSH_VERSION (STEP/IGES/BREP via OpenCASCADE) from PyPI"
@@ -44,21 +44,32 @@ done
 echo "==> assembling AppDir"
 rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib/fallback" "$BUILD/x"
-install -m755 "$BIN" "$APPDIR/usr/bin/3dthumb"
+install -m755 "$BIN" "$APPDIR/usr/bin/modelthumb"
 unzip -o -q -j "$WHL" "gmsh-$GMSH_VERSION.data/data/lib/libgmsh.so*" -d "$APPDIR/usr/lib/"
 for d in "${DEBS[@]}"; do
   rm -rf "$BUILD/x"/*; dpkg-deb -x "$BUILD/dl/$(basename "$d")" "$BUILD/x"
   find "$BUILD/x" -name 'lib*.so.[0-9]' -exec cp -L {} "$APPDIR/usr/lib/fallback/" \;
 done
-cp assets/3dthumb.png "$APPDIR/3dthumb.png"
-cp assets/3dthumb.png "$APPDIR/.DirIcon"
-cat > "$APPDIR/3dthumb.desktop" <<'DESK'
+# licenses: GPL-3.0 for modelthumb, plus the notices of everything bundled
+LIC=$APPDIR/usr/share/licenses/modelthumb
+mkdir -p "$LIC"
+cp LICENSE THIRD-PARTY-LICENSES.md "$LIC/"
+unzip -o -q -j "$WHL" "gmsh-$GMSH_VERSION.data/data/share/doc/gmsh/LICENSE.txt" -d "$BUILD/x"
+mv "$BUILD/x/LICENSE.txt" "$LIC/gmsh-LICENSE.txt"
+for d in "${DEBS[@]}"; do
+  pkg=$(basename "$d" | cut -d_ -f1)
+  rm -rf "$BUILD/x"/*; dpkg-deb -x "$BUILD/dl/$(basename "$d")" "$BUILD/x"
+  cp "$BUILD/x/usr/share/doc/$pkg/copyright" "$LIC/$pkg-copyright"
+done
+cp assets/modelthumb.png "$APPDIR/modelthumb.png"
+cp assets/modelthumb.png "$APPDIR/.DirIcon"
+cat > "$APPDIR/modelthumb.desktop" <<'DESK'
 [Desktop Entry]
 Type=Application
-Name=3D Thumbnailer
+Name=modelthumb
 Comment=Previews for STL, 3MF, STEP, IGES, OBJ, PLY and glTF files in the file manager
-Exec=3dthumb
-Icon=3dthumb
+Exec=modelthumb
+Icon=modelthumb
 Terminal=false
 Categories=Graphics;3DGraphics;Utility;
 DESK
@@ -66,7 +77,7 @@ cat > "$APPDIR/AppRun" <<'RUN'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
 export APPDIR="${APPDIR:-$HERE}"
-exec "$HERE/usr/bin/3dthumb" "$@"
+exec "$HERE/usr/bin/modelthumb" "$@"
 RUN
 chmod +x "$APPDIR/AppRun"
 
@@ -75,5 +86,5 @@ TOOL=$BUILD/dl/appimagetool-x86_64.AppImage
 [ -s "$TOOL" ] || curl -fL -o "$TOOL" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
 chmod +x "$TOOL"
 # --appimage-extract-and-run: works without FUSE (containers, CI)
-ARCH=x86_64 "$TOOL" --appimage-extract-and-run --no-appstream "$APPDIR" "$ROOT/dist/3D-Thumbnailer-x86_64.AppImage"
-ls -lh "$ROOT/dist/3D-Thumbnailer-x86_64.AppImage"
+ARCH=x86_64 "$TOOL" --appimage-extract-and-run --no-appstream "$APPDIR" "$ROOT/dist/modelthumb-x86_64.AppImage"
+ls -lh "$ROOT/dist/modelthumb-x86_64.AppImage"

@@ -448,6 +448,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "modelthumb"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "gltf",
+ "image",
+ "libloading",
+ "md-5",
+ "percent-encoding",
+ "png 0.17.16",
+ "quick-xml",
+ "tobj",
+ "zip",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -623,23 +640,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "thumb3d"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "gltf",
- "image",
- "libloading",
- "md-5",
- "percent-encoding",
- "png 0.17.16",
- "quick-xml",
- "tobj",
- "zip",
 ]
 
 [[package]]

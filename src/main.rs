@@ -1,8 +1,24 @@
+/// println! that never panics (e.g. on a closed pipe), so long operations always finish
+macro_rules! say {
+    ($($t:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stdout(), $($t)*);
+    }};
+}
+macro_rules! esay {
+    ($($t:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($t)*);
+    }};
+}
+
 mod cad;
 mod install;
 mod mesh;
 mod output;
 mod render;
+#[cfg(test)]
+mod tests;
 mod threemf;
 
 use anyhow::{bail, Result};
@@ -14,7 +30,11 @@ use std::process::Command;
 use std::time::Instant;
 
 #[derive(Parser)]
-#[command(name = "3dthumb", version, about = "3D model previews (STL, 3MF, STEP, IGES, OBJ, PLY, glTF) for Linux file managers")]
+#[command(
+    name = "modelthumb",
+    version,
+    about = "3D model previews (STL, 3MF, STEP, IGES, OBJ, PLY, glTF) for Linux file managers"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
@@ -42,7 +62,14 @@ struct View {
 
 impl Default for View {
     fn default() -> Self {
-        View { size: 256, color: None, background: None, azimuth: -35.0, elevation: 28.0, quality: 1.0 }
+        View {
+            size: 256,
+            color: None,
+            background: None,
+            azimuth: -35.0,
+            elevation: 28.0,
+            quality: 1.0,
+        }
     }
 }
 
@@ -112,11 +139,9 @@ fn local_path(s: &str) -> PathBuf {
     match s.strip_prefix("file://") {
         Some(rest) => {
             let rest = rest.find('/').map(|i| &rest[i..]).unwrap_or(rest); // drop host part
-            PathBuf::from(std::ffi::OsString::from(
-                <std::ffi::OsString as std::os::unix::ffi::OsStringExt>::from_vec(
-                    percent_encoding::percent_decode_str(rest).collect(),
-                ),
-            ))
+            use std::os::unix::ffi::OsStringExt;
+            let bytes: Vec<u8> = percent_encoding::percent_decode_str(rest).collect();
+            PathBuf::from(std::ffi::OsString::from_vec(bytes))
         }
         None => PathBuf::from(s),
     }
@@ -130,9 +155,16 @@ fn make_image(path: &Path, v: &View, prefer_embedded: bool) -> Result<Image> {
         }
     }
     let m = mesh::load(path, v.quality)?;
-    let mut o = Options { size: v.size, ..Default::default() };
+    let mut o = Options {
+        size: v.size,
+        ..Default::default()
+    };
     if let Some(c) = v.color {
-        o.color = [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0];
+        o.color = [
+            c[0] as f32 / 255.0,
+            c[1] as f32 / 255.0,
+            c[2] as f32 / 255.0,
+        ];
     }
     o.background = v.background.map(|c| [c[0], c[1], c[2], 255]);
     o.azimuth = v.azimuth;
@@ -143,7 +175,9 @@ fn make_image(path: &Path, v: &View, prefer_embedded: bool) -> Result<Image> {
 fn iter_files(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
     fn ok(p: &Path) -> bool {
         let n = p.to_string_lossy().to_lowercase();
-        mesh::EXTENSIONS.iter().any(|e| n.ends_with(&format!(".{e}")))
+        mesh::EXTENSIONS
+            .iter()
+            .any(|e| n.ends_with(&format!(".{e}")))
     }
     fn walk(d: &Path, rec: bool, out: &mut Vec<PathBuf>) {
         let Ok(rd) = std::fs::read_dir(d) else { return };
@@ -171,25 +205,43 @@ fn iter_files(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
 }
 
 fn gui_first_run() -> Result<()> {
-    let text = "3D-Thumbnailer zeigt Vorschaubilder für STL, 3MF, STEP, IGES, OBJ, PLY und glTF im Dateimanager.\n\n\
+    let text = "modelthumb zeigt Vorschaubilder für STL, 3MF, STEP, IGES, OBJ, PLY und glTF im Dateimanager.\n\n\
                 Für den aktuellen Benutzer installieren?";
-    let ask = |cmd: &str, args: &[&str]| Command::new(cmd).args(args).status().map(|s| s.success()).ok();
-    let ok = ask("zenity", &["--question", "--title=3D-Thumbnailer", &format!("--text={text}")])
-        .or_else(|| ask("kdialog", &["--title", "3D-Thumbnailer", "--yesno", text]));
+    let ask = |cmd: &str, args: &[&str]| {
+        Command::new(cmd)
+            .args(args)
+            .status()
+            .map(|s| s.success())
+            .ok()
+    };
+    let ok = ask(
+        "zenity",
+        &[
+            "--question",
+            "--title=modelthumb",
+            &format!("--text={text}"),
+        ],
+    )
+    .or_else(|| ask("kdialog", &["--title", "modelthumb", "--yesno", text]));
     if ok == Some(true) {
         let r = install::install(false);
         let msg = match &r {
             Ok(_) => "Installiert. Bitte den Dateimanager neu starten.".to_string(),
             Err(e) => format!("Installation fehlgeschlagen: {e}"),
         };
-        let _ = Command::new("notify-send").args(["3D-Thumbnailer", &msg]).status();
+        let _ = Command::new("notify-send")
+            .args(["modelthumb", &msg])
+            .status();
         r?;
     }
     Ok(())
 }
 
 fn run() -> Result<i32> {
-    if std::env::args().len() == 1 && !std::io::stdin().is_terminal() && !std::io::stdout().is_terminal() {
+    if std::env::args().len() == 1
+        && !std::io::stdin().is_terminal()
+        && !std::io::stdout().is_terminal()
+    {
         gui_first_run()?;
         return Ok(0);
     }
@@ -200,44 +252,80 @@ fn run() -> Result<i32> {
         return Ok(0);
     };
     match cmd {
-        Cmd::Thumbnail { size, input, output } => {
-            let v = View { size, ..Default::default() };
+        Cmd::Thumbnail {
+            size,
+            input,
+            output,
+        } => {
+            let v = View {
+                size,
+                ..Default::default()
+            };
             let img = make_image(&local_path(&input), &v, true)?;
             output::write_atomic(&output, &output::encode_png(&img, &[])?, None)?;
         }
-        Cmd::Render { input, output, view } => {
-            let out = output.unwrap_or_else(|| PathBuf::from(format!("{}.png", input.file_stem().unwrap_or_default().to_string_lossy())));
+        Cmd::Render {
+            input,
+            output,
+            view,
+        } => {
+            let out = output.unwrap_or_else(|| {
+                PathBuf::from(format!(
+                    "{}.png",
+                    input.file_stem().unwrap_or_default().to_string_lossy()
+                ))
+            });
             let t = Instant::now();
             let img = make_image(&input, &view, false)?;
             output::write_atomic(&out, &output::encode_png(&img, &[])?, None)?;
-            println!("{}  ({}x{}, {:.2}s)", out.display(), img.w, img.h, t.elapsed().as_secs_f64());
+            say!(
+                "{}  ({}x{}, {:.2}s)",
+                out.display(),
+                img.w,
+                img.h,
+                t.elapsed().as_secs_f64()
+            );
         }
-        Cmd::Embed { files, recursive, force, view } => {
+        Cmd::Embed {
+            files,
+            recursive,
+            force,
+            view,
+        } => {
             let mut rc = 0;
             for p in iter_files(&files, recursive) {
                 match mesh::sniff(&p) {
                     Ok(mesh::Kind::ThreeMf) => {}
                     _ => {
-                        println!("skip   {}: only 3MF has a thumbnail field - use '3dthumb cache' instead", p.display());
+                        say!("skip   {}: only 3MF has a thumbnail field - use 'modelthumb cache' instead", p.display());
                         continue;
                     }
                 }
                 if !force && threemf::thumbnail(&p).is_some() {
-                    println!("keep   {}: already has a thumbnail (--force replaces it)", p.display());
+                    say!(
+                        "keep   {}: already has a thumbnail (--force replaces it)",
+                        p.display()
+                    );
                     continue;
                 }
-                let r = make_image(&p, &view, false).and_then(|img| output::embed_3mf(&p, &output::encode_png(&img, &[])?));
+                let r = make_image(&p, &view, false)
+                    .and_then(|img| output::embed_3mf(&p, &output::encode_png(&img, &[])?));
                 match r {
-                    Ok(()) => println!("embed  {}", p.display()),
+                    Ok(()) => say!("embed  {}", p.display()),
                     Err(e) => {
-                        eprintln!("error  {}: {e:#}", p.display());
+                        esay!("error  {}: {e:#}", p.display());
                         rc = 1;
                     }
                 }
             }
             return Ok(rc);
         }
-        Cmd::Cache { paths, recursive, force, sizes } => {
+        Cmd::Cache {
+            paths,
+            recursive,
+            force,
+            sizes,
+        } => {
             let mut flavors = vec![];
             for s in sizes.split(',').map(str::trim).filter(|s| !s.is_empty()) {
                 match output::CACHE_SIZES.iter().find(|(n, _)| *n == s) {
@@ -251,29 +339,35 @@ fn run() -> Result<i32> {
                 if !force && flavors.iter().all(|(f, _)| output::cache_is_fresh(&p, f)) {
                     continue;
                 }
-                let v = View { size: big, ..Default::default() };
+                let v = View {
+                    size: big,
+                    ..Default::default()
+                };
                 match make_image(&p, &v, true) {
                     Ok(img) => {
                         for (f, px) in &flavors {
                             output::write_cache(&p, &img, f, *px)?;
                         }
                         n += 1;
-                        println!("cached {}", p.display());
+                        say!("cached {}", p.display());
                     }
                     Err(e) => {
-                        eprintln!("error  {}: {e:#}", p.display());
+                        esay!("error  {}: {e:#}", p.display());
                         rc = 1;
                     }
                 }
             }
-            println!("{n} preview(s) written to {}", output::cache_dir().display());
+            say!(
+                "{n} preview(s) written to {}",
+                output::cache_dir().display()
+            );
             return Ok(rc);
         }
         Cmd::Install { system } => install::install(system)?,
         Cmd::Uninstall { system } => install::uninstall(system)?,
         Cmd::Formats => {
-            println!("STL (binary/ASCII), 3MF, STEP/STP, IGES/IGS, BREP, OBJ, PLY, GLB/glTF, OFF");
-            println!("3MF files that already contain a slicer thumbnail show that image.");
+            say!("STL (binary/ASCII), 3MF, STEP/STP, IGES/IGS, BREP, OBJ, PLY, GLB/glTF, OFF");
+            say!("3MF files that already contain a slicer thumbnail show that image.");
         }
     }
     Ok(0)
@@ -283,7 +377,7 @@ fn main() {
     let code = match run() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("3dthumb: {e:#}");
+            esay!("modelthumb: {e:#}");
             1
         }
     };

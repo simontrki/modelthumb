@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    runs-on: ubuntu-latest
+    env:
+      GMSH_VERSION: "4.15.2"
+      OCCT_TAG: "V7_8_1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install build tools
+        run: pip install ziglang cargo-zigbuild
+      - run: cargo test
+      - name: Build AppImage
+        run: ./build-appimage.sh
+      - name: Smoke test
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          dist/modelthumb-x86_64.AppImage --version
+          printf 'OFF\n4 2 0\n0 0 0\n1 0 0\n1 1 0\n0 1 1\n3 0 1 2\n3 0 2 3\n' > /tmp/t.off
+          dist/modelthumb-x86_64.AppImage thumbnail -s 128 /tmp/t.off /tmp/t.png
+          file /tmp/t.png | grep -q 'PNG image data, 128 x 128'
+      - name: Fetch GPL corresponding source (Gmsh + OCCT)
+        run: |
+          mkdir -p dist/sources
+          curl -fL -o dist/sources/gmsh-${GMSH_VERSION}-source.tgz https://gmsh.info/src/gmsh-${GMSH_VERSION}-source.tgz
+          curl -fL -o dist/sources/occt-${OCCT_TAG}.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/${OCCT_TAG}.tar.gz
+          cd dist && sha256sum modelthumb-x86_64.AppImage > modelthumb-x86_64.AppImage.sha256
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: modelthumb-appimage
+          path: dist/modelthumb-x86_64.AppImage*
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --title "modelthumb ${GITHUB_REF_NAME}" --generate-notes \
+            dist/modelthumb-x86_64.AppImage dist/modelthumb-x86_64.AppImage.sha256 dist/sources/*

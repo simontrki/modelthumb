@@ -1,12 +1,16 @@
 [package]
-name = "thumb3d"
+name = "modelthumb"
 version = "1.0.0"
 edition = "2021"
-description = "3D model thumbnailer (STL, 3MF, STEP, IGES, OBJ, PLY, glTF) for Linux file managers"
-license = "MIT"
+rust-version = "1.88"
+description = "Thumbnails for 3D models (STL, 3MF, STEP, IGES, OBJ, PLY, glTF) in Linux file managers"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+keywords = ["thumbnailer", "stl", "3mf", "step", "3d-printing"]
+categories = ["command-line-utilities", "graphics", "rendering"]
 
 [[bin]]
-name = "3dthumb"
+name = "modelthumb"
 path = "src/main.rs"
 
 [dependencies]
