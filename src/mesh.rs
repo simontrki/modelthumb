@@ -175,13 +175,8 @@ pub fn load_obj(path: &Path) -> Result<Mesh> {
     let mut m = Mesh::default();
     for model in models {
         let p = &model.mesh.positions;
-        let verts = p.chunks_exact(3).map(|c| [c[0], c[1], c[2]]);
-        let faces: Vec<[u32; 3]> = model
-            .mesh
-            .indices
-            .chunks_exact(3)
-            .map(|c| [c[0], c[1], c[2]])
-            .collect();
+        let verts = p.as_chunks::<3>().0.iter().copied();
+        let faces: Vec<[u32; 3]> = model.mesh.indices.as_chunks::<3>().0.to_vec();
         m.append(verts, faces);
     }
     m.y_up_to_z_up();
@@ -245,12 +240,7 @@ pub fn load_gltf(path: &Path) -> Result<Mesh> {
                     Some(i) => i.into_u32().collect(),
                     None => (0..verts.len() as u32).collect(),
                 };
-                m.append(
-                    verts,
-                    idx.chunks_exact(3)
-                        .map(|c| [c[0], c[1], c[2]])
-                        .collect::<Vec<_>>(),
-                );
+                m.append(verts, idx.as_chunks::<3>().0.to_vec());
             }
         }
         for ch in node.children() {

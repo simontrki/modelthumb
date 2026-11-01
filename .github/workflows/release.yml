@@ -15,7 +15,7 @@ jobs:
       GMSH_VERSION: "4.15.2"
       OCCT_TAG: "V7_8_1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install build tools
@@ -38,7 +38,7 @@ jobs:
           curl -fL -o dist/sources/occt-${OCCT_TAG}.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/${OCCT_TAG}.tar.gz
           cd dist && sha256sum modelthumb-x86_64.AppImage > modelthumb-x86_64.AppImage.sha256
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: modelthumb-appimage
           path: dist/modelthumb-x86_64.AppImage*

@@ -276,11 +276,13 @@ pub fn load(path: &Path, quality: f64) -> Result<Mesh> {
             let nt = std::slice::from_raw_parts(*ntag.add(k), n);
             match etype {
                 2 => mesh.faces.extend(
-                    nt.chunks_exact(3)
+                    nt.as_chunks::<3>()
+                        .0
+                        .iter()
                         .map(|c| [get(c[0]), get(c[1]), get(c[2])]),
                 ),
                 3 => {
-                    for c in nt.chunks_exact(4) {
+                    for c in nt.as_chunks::<4>().0 {
                         mesh.faces.push([get(c[0]), get(c[1]), get(c[2])]);
                         mesh.faces.push([get(c[0]), get(c[2]), get(c[3])]);
                     }
