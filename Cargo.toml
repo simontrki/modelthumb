@@ -1,0 +1,30 @@
+[package]
+name = "thumb3d"
+version = "1.0.0"
+edition = "2021"
+description = "3D model thumbnailer (STL, 3MF, STEP, IGES, OBJ, PLY, glTF) for Linux file managers"
+license = "MIT"
+
+[[bin]]
+name = "3dthumb"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+quick-xml = "0.37"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+png = "0.17"
+md-5 = "0.10"
+libloading = "0.8"
+tobj = "4"
+gltf = { version = "1", default-features = false, features = ["import", "utils", "names"] }
+percent-encoding = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "unwind"
