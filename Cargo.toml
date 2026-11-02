@@ -1,6 +1,6 @@
 [package]
 name = "modelthumb"
-version = "1.0.0"
+version = "0.2.0-alpha"
 edition = "2021"
 rust-version = "1.88"
 description = "Thumbnails for 3D models (STL, 3MF, STEP, IGES, OBJ, PLY, glTF) in Linux file managers"

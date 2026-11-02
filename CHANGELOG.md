@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.0.0 – unreleased
+## 0.2.0-alpha – 2026-11-02
 
-First release.
+First public alpha release.
 
 - Thumbnails for STL, 3MF, STEP, IGES, BREP, OBJ, PLY, OFF, glTF/GLB
 - 3MF: uses embedded slicer previews; multi-part (production extension) projects
